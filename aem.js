@@ -25,7 +25,7 @@ async function readArticleData() {
         const slug = article.slug; 
         const lasSlug = slug.split('/').pop();
         const title = article.metadata.title; 
-        const blocks = article.mainContent;
+        const blocks = article.mainContent.blocks; 
         // console.log("jsonArray",blocks);
         // console.log("Processing Article:");
         // console.log("Title:", title);
@@ -35,7 +35,8 @@ async function readArticleData() {
         // Call your functions for each article
         // await createArticleDetailFragment(lasSlug, title);
         // await addArticleDetailsContent(lasSlug, title);
-        splitResult = splitJsonByImage(jsonArray);
+        splitResult = splitJsonByImage(blocks);
+        console.log("splitResult",splitResult);
       }
     } catch (err) {
       console.error("Error reading the file:", err);
@@ -43,15 +44,12 @@ async function readArticleData() {
   }
 
 
-  function splitJsonByImage(jsonArray) {
+  function splitJsonByImage(blocks) {
     const result = [];
     let tempArray = [];
   
-    jsonArray.forEach((item) => {
-      if (
-        item._type === "image" ||
-        item._type === "video" 
-      ) {
+    blocks.forEach((item) => {
+      if (item._type === "image" || item._type === "video") {
         if (tempArray.length) {
           result.push(tempArray);
         }
@@ -170,70 +168,70 @@ export async function createArticleDetailFragment(lasSlug,){
         console.error(`Error creating fragment: for fragment`, error.message);
     }
 }
-export async function addBannerMediaGroupContent(mediaName){
-    try {
-        const formData = new FormData();
-        formData.append("_charset_", "utf-8");
-        formData.append(":newVersion", "false");
-        formData.append(":type", "multiple");
-        formData.append("slug","helllo");
-        formData.append("mobileimageid", "hiiii");
-        formData.append("mobileimagealt", "hiiii");
-        formData.append("mobileimagetype","");
-        formData.append("desktopimageid", "hiiii");
-        formData.append("desktopimagealt", "hiiii");
-        formData.append("desktopimagetype","");
-        formData.append("videoid","");
-        formData.append("videotype","");
-        formData.append("youtubeid","");
-        formData.append("imageSource", "text/html");
-        formData.append("videosource", "");
-        const response = await fetch(`${authorpath}/testing-grounds/${mediaName}.cfm.content.json`, {
-            method: "POST",
-            headers: {
-                "cookie": `${int_cookie}`,
-                "crsf-token": `${int_crftoken}`,
-            },
-            body: formData,
-        });
-        if (!response.ok) {
-            throw new Error(`Response status: ${response.status}`);
-        }
+// export async function addBannerMediaGroupContent(mediaName){
+//     try {
+//         const formData = new FormData();
+//         formData.append("_charset_", "utf-8");
+//         formData.append(":newVersion", "false");
+//         formData.append(":type", "multiple");
+//         formData.append("slug","helllo");
+//         formData.append("mobileimageid", "hiiii");
+//         formData.append("mobileimagealt", "hiiii");
+//         formData.append("mobileimagetype","");
+//         formData.append("desktopimageid", "hiiii");
+//         formData.append("desktopimagealt", "hiiii");
+//         formData.append("desktopimagetype","");
+//         formData.append("videoid","");
+//         formData.append("videotype","");
+//         formData.append("youtubeid","");
+//         formData.append("imageSource", "text/html");
+//         formData.append("videosource", "");
+//         const response = await fetch(`${authorpath}/testing-grounds/${mediaName}.cfm.content.json`, {
+//             method: "POST",
+//             headers: {
+//                 "cookie": `${int_cookie}`,
+//                 "crsf-token": `${int_crftoken}`,
+//             },
+//             body: formData,
+//         });
+//         if (!response.ok) {
+//             throw new Error(`Response status: ${response.status}`);
+//         }
 
-    } catch (error) {
-        console.error(`Error creating fragment: for fragment`, error.message);
-    }
-}
-export async function addBannerTeaserGroupContent(teaserName){
-    try {
-        const formData = new FormData();
-        formData.append("_charset_", "utf-8");
-        formData.append(":newVersion", "false");
-        formData.append(":type", "multiple");
-        formData.append("slug","helllo");
-        formData.append("title", "hiiii");
-        formData.append("subtitle", "hiiii");
-        formData.append("description","");
-        formData.append("description@ContentType", "text/html");
-        formData.append("ctatext", "");
-        formData.append("ctalink", "");
-        formData.append("bannerteasergroup", "/content/dam/headless/bebeautiful/in-en/beginner-makeup-steps/beginner-makeup-content1");
-        const response = await fetch(`${authorpath}/testing-grounds/${teaserName}.cfm.content.json`, {
-            method: "POST",
-            headers: {
-                "cookie": `${int_cookie}`,
-                "crsf-token": `${int_crftoken}`,
-            },
-            body: formData,
-        });
-        if (!response.ok) {
-            throw new Error(`Response status: ${response.status}`);
-        }
+//     } catch (error) {
+//         console.error(`Error creating fragment: for fragment`, error.message);
+//     }
+// }
+// export async function addBannerTeaserGroupContent(teaserName){
+//     try {
+//         const formData = new FormData();
+//         formData.append("_charset_", "utf-8");
+//         formData.append(":newVersion", "false");
+//         formData.append(":type", "multiple");
+//         formData.append("slug","helllo");
+//         formData.append("title", "hiiii");
+//         formData.append("subtitle", "hiiii");
+//         formData.append("description","");
+//         formData.append("description@ContentType", "text/html");
+//         formData.append("ctatext", "");
+//         formData.append("ctalink", "");
+//         formData.append("bannerteasergroup", "/content/dam/headless/bebeautiful/in-en/beginner-makeup-steps/beginner-makeup-content1");
+//         const response = await fetch(`${authorpath}/testing-grounds/${teaserName}.cfm.content.json`, {
+//             method: "POST",
+//             headers: {
+//                 "cookie": `${int_cookie}`,
+//                 "crsf-token": `${int_crftoken}`,
+//             },
+//             body: formData,
+//         });
+//         if (!response.ok) {
+//             throw new Error(`Response status: ${response.status}`);
+//         }
 
-    } catch (error) {
-        console.error(`Error creating fragment: for fragment`, error.message);
-    }
-}
+//     } catch (error) {
+//         console.error(`Error creating fragment: for fragment`, error.message);
+//     }
+// }
 
 export async function addBannerGroupContent(bannerName){
     try {
