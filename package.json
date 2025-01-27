@@ -1,6 +1,7 @@
 {
   "type": "module",
   "dependencies": {
+    "@sanity/block-content-to-html": "^2.0.0",
     "axios": "^1.7.9",
     "cheerio": "^1.0.0",
     "flatted": "^3.3.2",
