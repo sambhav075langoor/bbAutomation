@@ -26,12 +26,11 @@ async function readArticleData() {
             const lasSlug = slug.split('/').pop();
             const title = article.metadata.title; 
             const blocks = article.mainContent.blocks; 
-            
+            splitResult = splitJsonByImage(blocks);
             // Call your functions for each article
             await createArticleDetailFragment(lasSlug, title);
             await addArticleDetailsContent(lasSlug, title);
-            splitResult = splitJsonByImage(blocks);
-            // console.log("splitResult", splitResult);
+            console.log("splitResult of slug",slug, splitResult);
         }
 
         // Ensure renderBlock is called after data is processed
@@ -101,7 +100,7 @@ function processHtmlContent(htmlContent) {
 
 readArticleData();
 
-// console.log("renderBlock(0)", renderBlock(0)); 
+console.log("renderBlock(0)", renderBlock(0));
 
 // console.log("slug", slug);
 export async function createBannerMediaFragment(mediaName){
