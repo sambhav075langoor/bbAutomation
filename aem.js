@@ -1,364 +1,220 @@
-import { title } from "process";
 import {
     wcmcommand_path,
     authorpath,
     int_crftoken,
     int_cookie,
 } from "./aem_config.js";
-// import articleData from "./articleData.json";
-
-// import * as fsPromises from 'fs/promises';
-
-// const fs = require('fs').promises;
-
 import { promises as fs } from 'fs';
 
-let splitResult = [];
+import extractAuthorInfo from "./authorAem.js";
+const delay = (min, max) => {
+    const randomDelay = Math.random() * (max - min) + min;
+    return new Promise((resolve) => setTimeout(resolve, randomDelay * 1000));
+};
+
 
 async function readArticleData() {
     try {
-        // Read the JSON file
         const data = await fs.readFile('articleData.json', 'utf8');
-        const jsonData = JSON.parse(data);
-        
-        for (const article of jsonData) {
-            const slug = article.slug; 
-            const lasSlug = slug.split('/').pop();
-            const title = article.metadata.title; 
-            const blocks = article.mainContent.blocks; 
-            
-            // Call your functions for each article
-            await createArticleDetailFragment(lasSlug, title);
-            await addArticleDetailsContent(lasSlug, title);
-            splitResult = splitJsonByImage(blocks);
-            // console.log("splitResult", splitResult);
+        const articles = JSON.parse(data);
+ 
+        for (const article of articles) {
+            if (!article || !article.url || !article.content) {
+                console.warn("Skipping invalid article data:", article);
+                continue;
+            }
+ 
+            const slug = article.url.split('/').pop();
+            const titleMatch = article.content.match(/# (.*?)\n/);
+            const title = titleMatch ? titleMatch[1] : '';
+ 
+            const subtitleMatch = article.content.match(/# .*?\n\n\*(.*?)\*.*?Home > Hair > Haircuts/s);
+            const subtitle = subtitleMatch ? subtitleMatch[1].trim() : '';
+ 
+            const tagsMatch = article.content.match(/\*\*Tags:\*\* (.*?)\n/);
+            const tags = tagsMatch ? tagsMatch[1].trim() : '';
+ 
+            const dateMatch = article.content.match(/\*\*Date:\*\*\s*(\d{1,2})\s*(\w{3})\s*[’'‘](\d{2})/);
+            // console.log("dateMatch", dateMatch);
+            let formattedDate = '';
+            if (dateMatch) {
+                const day = dateMatch[1].padStart(2, '0');
+                const month = convertMonth(dateMatch[2]);
+                const year = `20${dateMatch[3]}`;
+                formattedDate = `${year}-${month}-${day}`;
+            }
+ 
+            console.log("Processing article:", title);
+            const blocks = splitContentIntoBlocks(article.content);
+            const authorInfo = extractAuthorInfo(article.content);
+            await createArticleDetailFragment(slug, title);
+            await addArticleDetailsContent(slug, title, subtitle, tags, blocks, authorInfo.slug, formattedDate);
         }
-
-        // Ensure renderBlock is called after data is processed
-        console.log(renderBlock(0));
     } catch (err) {
         console.error("Error reading the file:", err);
     }
 }
 
-function splitJsonByImage(blocks) {
-    const result = [];
-    let tempArray = [];
 
-    blocks.forEach((item) => {
-        if (item._type === "image" || item._type === "video") {
-            if (tempArray.length) {
-                result.push(tempArray);
+
+function convertMonth(monthStr) {
+    const monthMap = {
+        'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04',
+        'May': '05', 'Jun': '06', 'Jul': '07', 'Aug': '08',
+        'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'
+    };
+    return monthMap[monthStr] || '01'; 
+}
+ 
+
+
+function splitContentIntoBlocks(content) {
+    const blocks = [];
+    let currentBlock = '';
+    
+    const mainContent = content.split('### About the Author')[0];
+    
+    const contentAfterMetadata = mainContent.split(/##/)[1] ? '##' + mainContent.split(/##/).slice(1).join('##') : '';
+    
+    const lines = contentAfterMetadata.split('\n');
+    
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+
+        if (line.match(/!\[.*?\]\(.*?\)/) || line.match(/\*\*<img.*?>\*\*/)) {
+            if (currentBlock.trim()) {
+                blocks.push({
+                    type: 'description',
+                    content: formatContent(currentBlock)
+                });
+                currentBlock = '';
             }
-            tempArray = [];
-        } else {
-            tempArray.push(item);
+            continue;
         }
+
+        if (line.startsWith('## ')) {
+            if (currentBlock.trim()) {
+                blocks.push({
+                    type: 'description',
+                    content: formatContent(currentBlock)
+                });
+                currentBlock = '';
+            }
+            currentBlock = line + '\\n\\n';  
+        } else if (line) {
+            currentBlock += line + '\\n\\n';
+        }
+        if (i === lines.length - 1 && currentBlock.trim()) {
+            blocks.push({
+                type: 'description',
+                content: formatContent(currentBlock)
+            });
+        }
+    }
+
+    return blocks.filter(block => {
+        if (block.type === 'description') {
+            return block.content.length > 0;
+        }
+        return true;
     });
-
-    if (tempArray.length) {
-        result.push(tempArray);
-    }
-
-    return result;
 }
 
-import blocksToHtml from '@sanity/block-content-to-html';
-function renderBlock(num) {
-    // Validate splitResult
-    if (!Array.isArray(splitResult) || !splitResult.length) {
-        console.error("splitResult is not populated or is not an array.");
-        return '';
-    }
-
-    // Validate index range
-    if (num < 0 || num >= splitResult.length) {
-        console.error(`Index out of bounds: ${num}`);
-        return '';
-    }
-
-    const blockArray = splitResult[num];
-
-    // Validate the block array
-    if (!Array.isArray(blockArray)) {
-        console.error(`Block at index ${num} is not a valid array.`);
-        return '';
-    }
-
-    const htmlContent = blocksToHtml({
-        blocks: blockArray
-    });
-
-    // Process the HTML content before returning
-    return processHtmlContent(htmlContent);
+function formatContent(content) {
+    return content
+        .split(/\\n\\n|\n/)
+        .map(line => line.trim())
+        .filter(line => line.length > 0)
+        .join('\\n\\n')
+        .replace(/\\n\\n$/, '');  
 }
 
-function processHtmlContent(htmlContent) {
-    // Add your processing logic here if needed
-    return htmlContent;
-}
-
-
-readArticleData();
-
-// console.log("renderBlock(0)", renderBlock(0)); 
-
-// console.log("slug", slug);
-export async function createBannerMediaFragment(mediaName){
+async function createArticleDetailFragment(slug, title) {
+    await delay(3, 5);
     try {
         const formData = new FormData();
         formData.append("_charset_", "utf-8");
-        formData.append("parentPath","/content/dam/headless/bebeautiful/in-en/testing-grounds");
-        formData.append("template", "/conf/bebeautiful/settings/dam/cfm/models/banner-media-group");
-        formData.append("./jcr:title", `${mediaName}`);
-        formData.append("description","");
-        formData.append("name", `${mediaName}`);
-        const response = await fetch(`${wcmcommand_path}`, {
-            method: "POST",
-            headers: {
-                "cookie": `${int_cookie}`,
-                "crsf-token": `${int_crftoken}`,
-            },
-            body: formData,
-        });
-        if (!response.ok) {
-            throw new Error(`Response status: ${response.status}`);
-        }
-
-    } catch (error) {
-        console.error(`Error creating fragment: for fragment`, error.message);
-    }
-}
-export async function createBannerTeaserGroupFragment(teaserName){
-    try {
-        const formData = new FormData();
-        formData.append("_charset_", "utf-8");
-        formData.append("parentPath","/content/dam/headless/bebeautiful/in-en/testing-grounds");
-        formData.append("template", "/conf/bebeautiful/settings/dam/cfm/models/banner-teaser-group");
-        formData.append("./jcr:title", `${teaserName}`);
-        formData.append("description","");
-        formData.append("name", `${teaserName}`);
-        const response = await fetch(`${wcmcommand_path}`, {
-            method: "POST",
-            headers: {
-                "cookie": `${int_cookie}`,
-                "crsf-token": `${int_crftoken}`,
-            },
-            body: formData,
-        });
-        if (!response.ok) {
-            throw new Error(`Response status: ${response.status}`);
-        }
-
-    } catch (error) {
-        console.error(`Error creating fragment: for fragment`, error.message);
-    }
-}
-export async function createBannerGroupFragment(bannerName){
-    try {
-        const formData = new FormData();
-        formData.append("_charset_", "utf-8");
-        formData.append("parentPath","/content/dam/headless/bebeautiful/in-en/testing-grounds");
-        formData.append("template", "/conf/bebeautiful/settings/dam/cfm/models/banner-group");
-        formData.append("./jcr:title", `${bannerName}`);
-        formData.append("description","");
-        formData.append("name", `${bannerName}`);
-        const response = await fetch(`${wcmcommand_path}`, {
-            method: "POST",
-            headers: {
-                "cookie": `${int_cookie}`,
-                "crsf-token": `${int_crftoken}`,
-            },
-            body: formData,
-        });
-        if (!response.ok) {
-            throw new Error(`Response status: ${response.status}`);
-        }
-
-    } catch (error) {
-        console.error(`Error creating fragment: for fragment`, error.message);
-    }
-}
-export async function createArticleDetailFragment(lasSlug,){
-    try {
-        const formData = new FormData();
-        formData.append("_charset_", "utf-8");
-        formData.append("parentPath","/content/dam/headless/bebeautiful/in-en/testing-grounds");
+        formData.append("parentPath", "/content/dam/headless/bebeautiful/in-en/all-things-makeup/everyday");
         formData.append("template", "/conf/bebeautiful/settings/dam/cfm/models/article-detail");
-        formData.append("./jcr:title", `${lasSlug}`);
-        formData.append("description","");
-        formData.append("name", `${lasSlug}`);
-        const response = await fetch(`${wcmcommand_path}`, {
+        formData.append("./jcr:title", slug);
+        formData.append("description", "");
+        formData.append("name", slug);
+
+        const response = await fetch(wcmcommand_path, {
             method: "POST",
             headers: {
-                "cookie": `${int_cookie}`,
-                "crsf-token": `${int_crftoken}`,
+                "cookie": int_cookie,
+                "csrf-token": int_crftoken,
             },
             body: formData,
         });
-        if (!response.ok) {
-            throw new Error(`Response status: ${response.status}`);
-        }
-     
-    } catch (error) {
-        console.error(`Error creating fragment: for fragment`, error.message);
-    }
-}
-// export async function addBannerMediaGroupContent(mediaName){
-//     try {
-//         const formData = new FormData();
-//         formData.append("_charset_", "utf-8");
-//         formData.append(":newVersion", "false");
-//         formData.append(":type", "multiple");
-//         formData.append("slug","helllo");
-//         formData.append("mobileimageid", "hiiii");
-//         formData.append("mobileimagealt", "hiiii");
-//         formData.append("mobileimagetype","");
-//         formData.append("desktopimageid", "hiiii");
-//         formData.append("desktopimagealt", "hiiii");
-//         formData.append("desktopimagetype","");
-//         formData.append("videoid","");
-//         formData.append("videotype","");
-//         formData.append("youtubeid","");
-//         formData.append("imageSource", "text/html");
-//         formData.append("videosource", "");
-//         const response = await fetch(`${authorpath}/testing-grounds/${mediaName}.cfm.content.json`, {
-//             method: "POST",
-//             headers: {
-//                 "cookie": `${int_cookie}`,
-//                 "crsf-token": `${int_crftoken}`,
-//             },
-//             body: formData,
-//         });
-//         if (!response.ok) {
-//             throw new Error(`Response status: ${response.status}`);
-//         }
 
-//     } catch (error) {
-//         console.error(`Error creating fragment: for fragment`, error.message);
-//     }
-// }
-// export async function addBannerTeaserGroupContent(teaserName){
-//     try {
-//         const formData = new FormData();
-//         formData.append("_charset_", "utf-8");
-//         formData.append(":newVersion", "false");
-//         formData.append(":type", "multiple");
-//         formData.append("slug","helllo");
-//         formData.append("title", "hiiii");
-//         formData.append("subtitle", "hiiii");
-//         formData.append("description","");
-//         formData.append("description@ContentType", "text/html");
-//         formData.append("ctatext", "");
-//         formData.append("ctalink", "");
-//         formData.append("bannerteasergroup", "/content/dam/headless/bebeautiful/in-en/beginner-makeup-steps/beginner-makeup-content1");
-//         const response = await fetch(`${authorpath}/testing-grounds/${teaserName}.cfm.content.json`, {
-//             method: "POST",
-//             headers: {
-//                 "cookie": `${int_cookie}`,
-//                 "crsf-token": `${int_crftoken}`,
-//             },
-//             body: formData,
-//         });
-//         if (!response.ok) {
-//             throw new Error(`Response status: ${response.status}`);
-//         }
-
-//     } catch (error) {
-//         console.error(`Error creating fragment: for fragment`, error.message);
-//     }
-// }
-
-export async function addBannerGroupContent(bannerName){
-    try {
-        const formData = new FormData();
-        formData.append("_charset_", "utf-8");
-        formData.append(":type", "multiple");
-        formData.append(":newVersion", "false");
-        formData.append("slug","helllo");
-        formData.append("title", "hiiii");
-        formData.append("subtitle", "hiiii");
-        formData.append("description","");
-        formData.append("description@ContentType", "text/html");
-        formData.append("bannertype", "");
-        formData.append("bannerteasergroup", "/content/dam/headless/bebeautiful/in-en/beginner-makeup-steps/beginner-makeup-content1");
-        const response = await fetch(`${authorpath}/testing-grounds/${bannerName}.cfm.content.json`, {
-            method: "POST",
-            headers: {
-                "cookie": `${int_cookie}`,
-                "crsf-token": `${int_crftoken}`,
-            },
-            body: formData,
-        });
         if (!response.ok) {
             throw new Error(`Response status: ${response.status}`);
         }
 
+        console.log(`Fragment created successfully for: ${slug}`);
     } catch (error) {
-        console.error(`Error creating fragment: for fragment`, error.message);
+        console.error(`Error creating fragment for ${slug}:`, error.message);
     }
 }
 
-export async function addArticleDetailsContent(lasSlug,title){
+async function addArticleDetailsContent(slug, title, subtitle, tags, blocks, authorslug, publishDate) {
+    console.log("publishDate",publishDate);
     try {
         const formData = new FormData();
         formData.append(":type", "multiple");
         formData.append("_charset_", "utf-8");
         formData.append(":newVersion", "false");
-        formData.append("slug",`${lasSlug}`);
-        formData.append("title", `${title}`);
-        formData.append("subtitle", "hiiii");
-        formData.append("descriptionblock1@ContentType", "text/html");
-        formData.append("descriptionblock1", `${renderBlock(0)}`);
-        formData.append("imagetab1", "1");
-        formData.append("descriptionblock2@ContentType", "text/html");
-        formData.append("descriptionblock2", `${renderBlock(1)}`);
-        formData.append("imagetab2", "2");
-        formData.append("descriptionblock3@ContentType", "text/html");
-        formData.append("descriptionblock3",`${renderBlock(2)}`);
-        formData.append("imagetab3", "3");
-        formData.append("descriptionblock4@ContentType", "text/html");
-        formData.append("descriptionblock4", `${renderBlock(3)}`);
-        formData.append("imagetab4", "");
-        formData.append("descriptionblock5@ContentType", "text/html");
-        formData.append("descriptionblock5", "");
-        formData.append("imagetab5", "");
-        formData.append("descriptionblock6@ContentType", "text/html");
-        formData.append("descriptionblock6", "");
-        formData.append("imagetab6", "");
-        formData.append("descriptionblock7@ContentType", "text/html");
-        formData.append("descriptionblock7", "");
-        formData.append("imagetab7", "");
-        formData.append("descriptionblock8@ContentType", "text/html");
-        formData.append("descriptionblock8", "");
-        formData.append("imagetab8", "");
-        formData.append("descriptionblock9@ContentType", "text/html");
-        formData.append("descriptionblock9", "");
-        formData.append("imagetab9", "");
-        formData.append("descriptionblock10@ContentType", "text/html");
-        formData.append("descriptionblock10", "");
-        formData.append("imagetab10", "");
-        // formData.append("articlebanner", `/content/dam/headless/bebeautiful/in-en/beginner-makeup-steps/${lasSlug}`);
-        // formData.append("articlecontent", "/content/dam/headless/bebeautiful/in-en/beginner-makeup-steps/beginner-makeup-content1");
-        const response = await fetch(`${authorpath}/testing-grounds/${lasSlug}.cfm.content.json`, {
+        formData.append("slug", slug);
+        formData.append("title", title);
+        formData.append("subtitle", subtitle);
+        formData.append("features", tags);
+        formData.append("authorDetails", `/content/dam/headless/bebeautiful/in-en/authors/${authorslug}`);
+        formData.append("publishDate", publishDate); 
+ 
+        let blockCount = 1;
+ 
+        blocks.forEach((block) => {
+            if (blockCount > 15) return;
+ 
+            if (block.type === 'description') {
+                formData.append(`descriptionblock${blockCount}@ContentType`, "text/html");
+ 
+                const formattedContent = block.content
+                    .replace(/^## (.*?)\\n\\n/, '## $1\\n\\n')
+                    .replace(/([^\\n])$/, '$1\\n\\n');  
+                formData.append(`descriptionblock${blockCount}`, formattedContent);
+                formData.append(`imagetab${blockCount}`, String(blockCount));
+                blockCount++;
+            }
+        });
+ 
+        while (blockCount <= 15) {
+            formData.append(`descriptionblock${blockCount}@ContentType`, "text/html");
+            formData.append(`descriptionblock${blockCount}`, "");
+            formData.append(`imagetab${blockCount}`, String(blockCount));
+            blockCount++;
+        }
+ 
+        const response = await fetch(`${authorpath}/all-things-makeup/everyday/${slug}.cfm.content.json`, {
             method: "POST",
             headers: {
-                "cookie": `${int_cookie}`,
-                "crsf-token": `${int_crftoken}`,
+                "cookie": int_cookie,
+                "csrf-token": int_crftoken,
             },
             body: formData,
         });
+ 
         if (!response.ok) {
             throw new Error(`Response status: ${response.status}`);
         }
-
+ 
+        console.log(`Content updated successfully for: ${slug}`);
     } catch (error) {
-        console.error(`Error in updating creating fragment: for fragment`, error.message);
+        console.error(`Error updating content for ${slug}:`, error.message);
     }
 }
-
-// createBannerMediaFragment('dummy1');
-// addBannerMediaGroupContent('dummy1');
-
-// createArticleDetailFragment(slug);
+// Initialize the process
 readArticleData();
+

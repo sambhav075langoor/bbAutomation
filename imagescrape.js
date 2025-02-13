@@ -1,8 +1,12 @@
-const cheerio = require('cheerio');
-const axios = require('axios');
-const url = require('url');  
-const fs = require('fs');
-const urlSources = require('./fixed_urls1.json').urlSources;
+import * as cheerio from 'cheerio'; 
+import axios from 'axios';
+import url from 'url';
+import fs from 'fs';
+
+
+
+const jsonData = JSON.parse(fs.readFileSync('./fixed_urls1.json', 'utf8'));
+const urlSources = jsonData.urlSources;
 const delay = (min, max) => {
     const randomDelay = Math.random() * (max - min) + min; 
     return new Promise(resolve => setTimeout(resolve, randomDelay * 1000)); 
