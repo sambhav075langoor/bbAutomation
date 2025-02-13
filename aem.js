@@ -12,6 +12,7 @@ const delay = (min, max) => {
     return new Promise((resolve) => setTimeout(resolve, randomDelay * 1000));
 };
 
+let tabId = [124888478];
 
 async function readArticleData() {
     try {
@@ -28,14 +29,13 @@ async function readArticleData() {
             const titleMatch = article.content.match(/# (.*?)\n/);
             const title = titleMatch ? titleMatch[1] : '';
  
-            const subtitleMatch = article.content.match(/# .*?\n\n\*(.*?)\*.*?Home > Hair > Haircuts/s);
+            const subtitleMatch = article.content.match(/# .*?\n\n\*(.*?)\*.*?Home/s);
             const subtitle = subtitleMatch ? subtitleMatch[1].trim() : '';
  
             const tagsMatch = article.content.match(/\*\*Tags:\*\* (.*?)\n/);
             const tags = tagsMatch ? tagsMatch[1].trim() : '';
  
-            const dateMatch = article.content.match(/\*\*Date:\*\*\s*(\d{1,2})\s*(\w{3})\s*[’'‘](\d{2})/);
-            // console.log("dateMatch", dateMatch);
+            const dateMatch = article.content.match(/\*\*Date:\*\*\s*(\d{1,2})\s*(\w{3})\s*['''](\d{2})/);
             let formattedDate = '';
             if (dateMatch) {
                 const day = dateMatch[1].padStart(2, '0');
@@ -45,17 +45,15 @@ async function readArticleData() {
             }
  
             console.log("Processing article:", title);
-            const blocks = splitContentIntoBlocks(article.content);
+            const { blocks, imageCount } = splitContentIntoBlocks(article.content);
             const authorInfo = extractAuthorInfo(article.content);
             await createArticleDetailFragment(slug, title);
-            await addArticleDetailsContent(slug, title, subtitle, tags, blocks, authorInfo.slug, formattedDate);
+            await addArticleDetailsContent(slug, title, subtitle, tags, blocks, authorInfo.slug, formattedDate, imageCount);
         }
     } catch (err) {
         console.error("Error reading the file:", err);
     }
 }
-
-
 
 function convertMonth(monthStr) {
     const monthMap = {
@@ -65,17 +63,14 @@ function convertMonth(monthStr) {
     };
     return monthMap[monthStr] || '01'; 
 }
- 
-
 
 function splitContentIntoBlocks(content) {
     const blocks = [];
+    let imageCount = 0;
     let currentBlock = '';
     
     const mainContent = content.split('### About the Author')[0];
-    
     const contentAfterMetadata = mainContent.split(/##/)[1] ? '##' + mainContent.split(/##/).slice(1).join('##') : '';
-    
     const lines = contentAfterMetadata.split('\n');
     
     for (let i = 0; i < lines.length; i++) {
@@ -89,6 +84,7 @@ function splitContentIntoBlocks(content) {
                 });
                 currentBlock = '';
             }
+            imageCount++;
             continue;
         }
 
@@ -112,12 +108,15 @@ function splitContentIntoBlocks(content) {
         }
     }
 
-    return blocks.filter(block => {
-        if (block.type === 'description') {
-            return block.content.length > 0;
-        }
-        return true;
-    });
+    return {
+        blocks: blocks.filter(block => {
+            if (block.type === 'description') {
+                return block.content.length > 0;
+            }
+            return true;
+        }),
+        imageCount
+    };
 }
 
 function formatContent(content) {
@@ -159,8 +158,8 @@ async function createArticleDetailFragment(slug, title) {
     }
 }
 
-async function addArticleDetailsContent(slug, title, subtitle, tags, blocks, authorslug, publishDate) {
-    console.log("publishDate",publishDate);
+async function addArticleDetailsContent(slug, title, subtitle, tags, blocks, authorslug, publishDate, imageCount) {
+    console.log("publishDate", publishDate);
     try {
         const formData = new FormData();
         formData.append(":type", "multiple");
@@ -174,9 +173,10 @@ async function addArticleDetailsContent(slug, title, subtitle, tags, blocks, aut
         formData.append("publishDate", publishDate); 
  
         let blockCount = 1;
+        let imageIndex = 0;
  
         blocks.forEach((block) => {
-            if (blockCount > 15) return;
+            if (blockCount > 20) return;
  
             if (block.type === 'description') {
                 formData.append(`descriptionblock${blockCount}@ContentType`, "text/html");
@@ -185,12 +185,19 @@ async function addArticleDetailsContent(slug, title, subtitle, tags, blocks, aut
                     .replace(/^## (.*?)\\n\\n/, '## $1\\n\\n')
                     .replace(/([^\\n])$/, '$1\\n\\n');  
                 formData.append(`descriptionblock${blockCount}`, formattedContent);
-                formData.append(`imagetab${blockCount}`, String(blockCount));
+                
+                // Use tabId for image blocks where images were found
+                if (imageIndex < imageCount) {
+                    formData.append(`imagetab${blockCount}`, tabId[0].toString());
+                    imageIndex++;
+                } else {
+                    formData.append(`imagetab${blockCount}`, String(blockCount));
+                }
                 blockCount++;
             }
         });
  
-        while (blockCount <= 15) {
+        while (blockCount <= 20) {
             formData.append(`descriptionblock${blockCount}@ContentType`, "text/html");
             formData.append(`descriptionblock${blockCount}`, "");
             formData.append(`imagetab${blockCount}`, String(blockCount));
@@ -215,6 +222,5 @@ async function addArticleDetailsContent(slug, title, subtitle, tags, blocks, aut
         console.error(`Error updating content for ${slug}:`, error.message);
     }
 }
-// Initialize the process
-readArticleData();
 
+readArticleData();

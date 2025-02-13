@@ -2,7 +2,10 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 const fs = require('fs');
 const urlSources = require('./output2.json').urlSources;
-
+const delay = (min, max) => {
+    const randomDelay = Math.random() * (max - min) + min;
+    return new Promise((resolve) => setTimeout(resolve, randomDelay * 1000));
+};
 async function scrapeArticle(html) {
     const $ = cheerio.load(html);
     let articleData = {
@@ -194,6 +197,7 @@ function convertToMarkdown(articleData) {
 }
 
 async function fetchAndProcessArticles() {
+    await delay(3, 5);
     let articles = [];
     for (let currentUrl of urlSources) {
         try {
