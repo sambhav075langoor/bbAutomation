@@ -5,8 +5,15 @@ import {
     int_cookie,
 } from "./aem_config.js";
 import { promises as fs } from 'fs';
-
+import { marked } from 'marked';
 import extractAuthorInfo from "./authorAem.js";
+
+// Marked options
+marked.setOptions({
+    breaks: true,
+    gfm: true,
+});
+
 const delay = (min, max) => {
     const randomDelay = Math.random() * (max - min) + min;
     return new Promise((resolve) => setTimeout(resolve, randomDelay * 1000));
@@ -120,12 +127,24 @@ function splitContentIntoBlocks(content) {
 }
 
 function formatContent(content) {
-    return content
+    let cleanContent = content
         .split(/\\n\\n|\n/)
         .map(line => line.trim())
         .filter(line => line.length > 0)
-        .join('\\n\\n')
-        .replace(/\\n\\n$/, '');  
+        .join('\n')
+        .replace(/\\n/g, '\n');
+
+    if (!cleanContent.startsWith('## ')) {
+        cleanContent = cleanContent.replace(/^(?!<)(.+)$/gm, '$1');
+    }
+
+    const htmlContent = marked(cleanContent);
+    
+    if (!content.trim().startsWith('## ')) {
+        return htmlContent.replace(/<h2>(.*?)<\/h2>/g, '$1');
+    }
+    
+    return htmlContent;
 }
 
 async function createArticleDetailFragment(slug, title) {
@@ -180,13 +199,8 @@ async function addArticleDetailsContent(slug, title, subtitle, tags, blocks, aut
  
             if (block.type === 'description') {
                 formData.append(`descriptionblock${blockCount}@ContentType`, "text/html");
- 
-                const formattedContent = block.content
-                    .replace(/^## (.*?)\\n\\n/, '## $1\\n\\n')
-                    .replace(/([^\\n])$/, '$1\\n\\n');  
-                formData.append(`descriptionblock${blockCount}`, formattedContent);
+                formData.append(`descriptionblock${blockCount}`, block.content);
                 
-                // Use tabId for image blocks where images were found
                 if (imageIndex < imageCount) {
                     formData.append(`imagetab${blockCount}`, tabId[0].toString());
                     imageIndex++;
